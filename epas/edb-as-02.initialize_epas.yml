@@ -1,24 +1,32 @@
-# Usage: ansible-playbook epas/edb-as-02.initialize_epas.yml -i inventory.ini --extra-vars "pgdata=/opt/edb/pgdata pgwal=/opt/edb/pgwal pgmajor=11"
+# Usage: ansible-playbook edb-as-02.initialize_epas.yml --extra-vars "host=ansible-tests pgdata=/opt/edb/pgdata pgwal=/opt/edb/pgwal pgmajor=11"
 # PGDATA and PGWAL are optional
 
 - hosts: epas-all
-  become: yes
+  become: true
   become_user: root
   become_method: sudo
   vars:
-      asmajor: "{{ pgmajor | default(11) }}"
+        asmajor: "{{ pgmajor | default(11) }}"
+        aspgdata: "{{ pgdata | default('/var/lib/edb/as'+asmajor+'/data') }}"
 
   tasks:
+    - name: Check if PGDATA is empty
+      stat:
+        path: "{{ pgdata if pgdata is defined else aspgdata }}/PG_VERSION"
+      register: PG_VERSION
+      become: true
+      become_user: enterprisedb
+      become_method: sudo
+
     - name: Create PGDATA direcotry
       file:
-        path: "{{ pgdata }}"
+        path: "{{ aspgdata }}"
         state: directory
         owner: enterprisedb
         group: enterprisedb
         mode: 0700
-      when: pgdata is defined
 
-    - name: Create PGWAL direcotry
+    - name: Create PGWAL directory
       file:
         path: "{{ pgwal }}"
         state: directory
@@ -27,39 +35,30 @@
         mode: 0700
       when: pgwal is defined
 
-    - name: Initialize EPAS with custom PGDATA and PGWAL
-      shell: /usr/edb/as{{ asmajor }}/bin/initdb --waldir="{{ pgwal }}" --pgdata="{{ pgdata }}"
-      when: pgdata is defined and pgwal is defined
+    #TODO Combine the following into one command, add options
+    - name: Initialize EPAS with custom PGWAL
+      shell: /usr/edb/as{{ asmajor }}/bin/initdb --waldir="{{ pgwal }}" --pgdata="{{ aspgdata }}"
+      when: pgwal is defined and not PG_VERSION.stat.exists
       become: true
       become_user: enterprisedb
       become_method: sudo
 
-    - name: Initialize EPAS with custom PGDATA, but NOT custom PGWAL
-      shell: /usr/edb/as{{ asmajor }}/bin/initdb --pgdata="{{ pgdata }}"
-      when: pgdata is defined and pgwal is undefined
+    - name: Initialize EPAS with PGDATA and WAL located inside PGDATA 
+      shell: /usr/edb/as{{ asmajor }}/bin/initdb --pgdata={{ aspgdata }}
+      when: pgwal is undefined and not PG_VERSION.stat.exists
       become: true
       become_user: enterprisedb
       become_method: sudo
 
-    - name: Initialize EPAS with custom PGWAL, but NOT custom PGDATA
-      shell: /usr/edb/as{{ asmajor }}/bin/initdb --pgdata=/var/lib/edb/as{{ asmajor }}/data/ --waldir="{{ pgwal }}"
-      when: pgdata is undefined and pgwal is defined
-      become: true
-      become_user: enterprisedb
-      become_method: sudo
-
-    - name: Initialize EPAS with default PGDATA and WAL located inside PGDATA (Defaults)
-      shell: /usr/edb/as{{ asmajor }}/bin/initdb --pgdata=/var/lib/edb/as{{ asmajor }}/data/
-      when: pgdata is undefined and pgwal is undefined
-      become: true
-      become_user: enterprisedb
-      become_method: sudo
+    - stat:
+        path: "/var/lib/edb/as{{ asmajor }}/data"
+      register: pgdatalnk
 
     - name: Remove default PGDATA directory
       file:
-        path: /var/lib/edb/as{{ asmajor }}/data/
+        path: "/var/lib/edb/as{{ asmajor }}/data/"
         state: absent
-      when: pgdata is defined
+      when: pgdata is defined and not pgdatalnk.stat.islnk
 
     - name: Create symbolic link from default PGDATA to custom to PGDATA (useful for running EPAS with system service)
       file:
@@ -71,8 +70,10 @@
         mode: 0700
       when: pgdata is defined
 
+    - debug:
+        msg: "edb-as-{{ asmajor }}" 
     - name: Starting EPAS as a system service...
       systemd:
-        name: edb-as-{{ asmajor }}
+        name: "edb-as-{{ asmajor }}"
         state: started
         enabled: yes
