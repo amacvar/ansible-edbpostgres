@@ -1,8 +1,8 @@
-# Usage: ansible-playbook edb-as-02.initialize_epas.yml --extra-vars "host=ansible-tests pgdata=/opt/edb/pgdata pgwal=/opt/edb/pgwal pgmajor=11"
+# Usage: ansible-playbook epas/edb-as-02.initialize_epas.yml -i inventory.ini --extra-vars "pgdata=/opt/edb/pgdata pgwal=/opt/edb/pgwal pgmajor=11"
 # PGDATA and PGWAL are optional
 
 - hosts: epas-all
-  become: true
+  become: yes
   become_user: root
   become_method: sudo
   vars:
@@ -14,7 +14,7 @@
       stat:
         path: "{{ pgdata if pgdata is defined else aspgdata }}/PG_VERSION"
       register: PG_VERSION
-      become: true
+      become: yes
       become_user: enterprisedb
       become_method: sudo
 
@@ -39,14 +39,14 @@
     - name: Initialize EPAS with custom PGWAL
       shell: /usr/edb/as{{ asmajor }}/bin/initdb --waldir="{{ pgwal }}" --pgdata="{{ aspgdata }}"
       when: pgwal is defined and not PG_VERSION.stat.exists
-      become: true
+      become: yes
       become_user: enterprisedb
       become_method: sudo
 
     - name: Initialize EPAS with PGDATA and WAL located inside PGDATA 
       shell: /usr/edb/as{{ asmajor }}/bin/initdb --pgdata={{ aspgdata }}
       when: pgwal is undefined and not PG_VERSION.stat.exists
-      become: true
+      become: yes
       become_user: enterprisedb
       become_method: sudo
 
