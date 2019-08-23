@@ -1,20 +1,23 @@
-# Prerequisite: Environment variables EDBYUMUSERNAME and EDBYUMPASSWORD must be set up on the Ansible Controller 
+# Prerequisite: Environment variables EDBYUMUSERNAME and EDBYUMPASSWORD must be set up on the Ansible Controller
 
-# Usage: ansible-playbook prereqs/1-edb-prereqs.edb_repo_config.yml -i inventory.ini
+# Usage: ansible-playbook prereqs/1-edb-prereqs.edb_repo_configure.yml --extra-vars "host=edb-servers"
 
-- hosts: all
+- hosts: "{{ host }}"
   become: yes
-  become_user: root
-  become_method: sudo
   vars:
-    yumusername:  "{{ lookup('env','EDBYUMUSERNAME') }}"
+    yumusername: "{{ lookup('env','EDBYUMUSERNAME') }}"
     yumpassword: "{{ lookup('env','EDBYUMPASSWORD') }}"
-        
+
   tasks:
     - name: Install latest EDB Repo
       yum:
         name: https://yum.enterprisedb.com/edbrepos/edb-repo-latest.noarch.rpm
         state: present
+
+    - assert:
+        that:
+          - yumusername != ""
+          - yumpassword != ""
 
     - name: Update edb.repo with YUM repository credentials
       replace:
